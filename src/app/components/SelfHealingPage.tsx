@@ -598,32 +598,52 @@ export function SelfHealingPage() {
 
 const prompt = `
 GÖREV:
-Aşağıdaki şikayet/veri özetine göre üst düzey yönetime sunulabilecek profesyonel, analitik ve uygulanabilir bir aksiyon planı hazırla.
+Aşağıdaki şikayet/veri özetine göre üst düzey yönetime sunulabilecek profesyonel, analitik, veri odaklı ve uygulanabilir bir aksiyon planı hazırla.
+
+ÖNEMLİ:
+- Çıktı minimum 1200 kelime olmalıdır.
+- Her başlık altında en az 2 paragraf bulunmalıdır.
+- Tek cümlelik açıklamalar yazma.
+- Her bölümde detaylı değerlendirme yap.
+- Yönetim danışmanlığı raporu seviyesinde profesyonel içerik üret.
+- Risk seviyesi, şikayet hacmi, müşteri etkisi, operasyonel etkiler ve kurumsal etkiler arasında ilişki kur.
+- Yüzeysel değerlendirme yapma.
+- Aynı cümleyi tekrar etme.
+- Her başlığı eksiksiz doldur.
+- Raporu yarıda bırakma.
+- Son başlık olan BEKLENEN KAZANIMLAR bölümünü mutlaka tamamla.
+- Son cümle kesin olarak:
+"Bu aksiyon planı, ölçülebilir risk azaltımı ve sürdürülebilir müşteri memnuniyeti artışı sağlamayı hedeflemektedir."
+olmalıdır.
 
 YAZIM KURALLARI:
 - Sadece Türkçe yaz.
 - İngilizce giriş cümlesi yazma.
 - "Here is", "in Turkish", "Türkçe aksiyon planı", "rolüm gereği" gibi ifadeler kullanma.
-- ROL, GÖREV, VERİLER veya TALİMAT başlıklarını çıktıya dahil etme.
-- Markdown, yıldız, çizgi süsleme veya kod bloğu kullanma.
-- Emir kipi kullanma. “Yapın, başlatın” yerine “başlatılması önerilir”, “uygulanmalıdır”, “izlenmelidir” ifadelerini kullan.
-- Aynı cümleyi tekrar etme.
-- Kategori adını sürekli tekrar etme.
-- Genel geçer cümleler kurma; veriyi yorumla.
-- Kesin zarar verdi deme; “risk oluşturabilir”, “olumsuz etki yaratabilir” gibi kurumsal ve temkinli dil kullan.
-- Her başlık altında 3-5 cümle yaz.
-- Yönetim kurulu sunumuna uygun, uzman danışmanlık raporu tonunda yaz.
-- Şikayet sayısı, risk skoru ve sorumlu birim arasında ilişki kur.
-- Başarı göstergeleri ölçülebilir KPI şeklinde olsun.
-- Beklenen kazanımlar olumlu ve stratejik fayda olarak yazılsın.
-- Raporu mutlaka BEKLENEN KAZANIMLAR başlığını tamamlayarak bitir.
-- Son cümle “Bu aksiyon planı, ölçülebilir risk azaltımı ve sürdürülebilir müşteri memnuniyeti artışı sağlamayı hedeflemektedir.” olsun.
+- ROL, GÖREV, TALİMAT veya VERİLER başlıklarını çıktıya dahil etme.
+- Markdown kullanma.
+- Kod bloğu oluşturma.
+- Yıldız işareti kullanma.
+- Madde işaretlerini doğal şekilde yaz.
+- Yönetim kurulu sunumuna uygun kurumsal dil kullan.
+- Emir kipi kullanma.
+- "Yapın", "Başlatın", "Uygulayın" gibi ifadeler kullanma.
+- Bunun yerine:
+"uygulanmalıdır"
+"başlatılması önerilir"
+"değerlendirilmelidir"
+"izlenmelidir"
+ifadelerini kullan.
+- Kesin yargılar kullanma.
+- "zarar verir" yerine "olumsuz etki oluşturabilir" kullan.
+- "müşteri kaybı yaşanır" yerine "müşteri kaybı riski oluşturabilir" kullan.
+- Gerçek danışmanlık raporu tonunda yaz.
 
 RİSK YORUMU:
-Risk skoru 80 ve üzerindeyse kritik öncelikli risk olarak değerlendir.
-Risk skoru 60-79 arasındaysa yüksek risk olarak değerlendir.
-Risk skoru 40-59 arasındaysa orta risk olarak değerlendir.
-Risk skoru 40 altındaysa düşük risk olarak değerlendir.
+- Risk skoru 80 ve üzerindeyse kritik öncelikli risk olarak değerlendir.
+- Risk skoru 60-79 arasındaysa yüksek risk olarak değerlendir.
+- Risk skoru 40-59 arasındaysa orta risk olarak değerlendir.
+- Risk skoru 40 altındaysa düşük risk olarak değerlendir.
 
 ÇIKTI BAŞLIKLARI:
 
@@ -658,7 +678,7 @@ Kök Neden: ${card.rootCause}
 Mevcut Aksiyon: ${card.action}
 Sorumlu Birim: ${card.unit}
 
-RAPORU DOĞRUDAN YÖNETİCİ ÖZETİ BAŞLIĞIYLA BAŞLAT.
+RAPORU DOĞRUDAN "YÖNETİCİ ÖZETİ" BAŞLIĞI İLE BAŞLAT.
 `;
 
     try {
@@ -671,10 +691,12 @@ RAPORU DOĞRUDAN YÖNETİCİ ÖZETİ BAŞLIĞIYLA BAŞLAT.
           model: "qwen3:8b",
           prompt: prompt,
           stream: false,
-          options: {
-            temperature: 0.35,
-            num_predict: 3000,
-          },
+       options: {
+  temperature: 0.55,
+  top_p: 0.9,
+  repeat_penalty: 1.1,
+  num_predict: 5000,
+},
         }),
       });
 
