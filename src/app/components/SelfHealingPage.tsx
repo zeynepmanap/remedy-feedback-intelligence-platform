@@ -703,7 +703,12 @@ RAPORU DOĞRUDAN "YÖNETİCİ ÖZETİ" BAŞLIĞI İLE BAŞLAT.
       if (!response.ok) throw new Error("Llama yanıt vermedi.");
 
       const data = await response.json();
-      const plan = cleanPlanText(data.response || getFallbackPlan(card));
+const aiResponse = cleanPlanText(data.response || "");
+
+const plan =
+  aiResponse.length > 700 && aiResponse.includes("YÖNETİCİ ÖZETİ")
+    ? aiResponse
+    : getFallbackPlan(card);
 
       setCards((prev) =>
         prev.map((item) =>
