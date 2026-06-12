@@ -786,7 +786,9 @@ export function AnalysisPage() {
               <h3 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "10px", color: "#0F172A" }}>
                 Şikayet Metni
               </h3>
-              <p style={{ lineHeight: 1.8, color: "#334155", fontSize: "13px" }}>{selectedRow.text}</p>
+              <p style={{ lineHeight: 1.8, color: "#334155", fontSize: "13px" }}>{selectedRow.text?.length > 1500
+  ? selectedRow.text.slice(0, 1500) + "..."
+  : selectedRow.text}</p>
             </div>
 
             <div

@@ -351,33 +351,49 @@ function getUnit(category: string) {
 }
 
 function getFallbackPlan(card: HealingCard) {
-  return `DÜZELTİCİ FAALİYET PLANI
+  return `YÖNETİCİ ÖZETİ
 
-KÖK NEDEN ÖZETİ
+${card.category} kategorisinde ${card.count} kayıt tespit edilmiştir. Risk skoru ${card.risk}/100 olarak hesaplanmış ve bu alan öncelikli iyileştirme başlıklarından biri olarak değerlendirilmiştir. Mevcut göstergeler, ilgili problemin yalnızca bireysel müşteri şikayetleriyle sınırlı olmadığını; operasyonel süreçler, müşteri deneyimi ve kurumsal itibar üzerinde de etkili olabileceğini göstermektedir. Bu nedenle ilgili birimlerin koordineli şekilde aksiyon alması önerilmektedir.
 
-${card.rootCause}
+KÖK NEDEN ANALİZİ
+
+Yapılan sınıflandırma sonucunda temel kök neden şu şekilde değerlendirilmiştir: ${card.rootCause} Bu kök neden, tekrar eden müşteri geri bildirimleriyle birlikte ele alındığında süreç, teknik kalite veya iletişim yönetimi açısından iyileştirme ihtiyacına işaret etmektedir. Risk seviyesinin düşürülebilmesi için yalnızca tekil şikayetlerin çözülmesi değil, aynı kategori altında tekrar eden problem yapısının sistematik olarak analiz edilmesi gerekmektedir.
+
+MÜŞTERİ DENEYİMİNE ETKİSİ
+
+Bu kategoriye ait geri bildirimler, müşterilerin hizmet veya ürün deneyiminde güven, süreklilik ve memnuniyet algısını etkileyebilir. Şikayet sayısının ${card.count} seviyesinde olması, problemin belirli bir kullanıcı grubuyla sınırlı kalmadığını ve daha geniş bir deneyim alanına yayılabileceğini göstermektedir. Müşteri tarafında belirsizlik, bekleme süresi, teknik sorun veya yetersiz bilgilendirme algısı oluşması halinde sadakat ve tekrar tercih oranları olumsuz etkilenebilir.
+
+OPERASYONEL ETKİLER
+
+Risk skorunun ${card.risk}/100 olması, ilgili kategorinin operasyonel kaynaklar üzerinde baskı oluşturabileceğini göstermektedir. Bu durum; servis, destek, operasyon, kalite veya teknik ekiplerin iş yükünü artırabilir ve çözüm sürelerinde uzamaya yol açabilir. Sürecin daha etkin yönetilebilmesi için kayıtların önceliklendirilmesi, tekrar eden başlıkların izlenmesi ve ilgili birimlere düzenli raporlanması önerilmektedir.
+
+KURUMSAL İTİBARA ETKİSİ
+
+Tekrar eden müşteri şikayetleri, yalnızca operasyonel bir problem değil aynı zamanda kurumsal güven algısını etkileyebilecek bir risk alanıdır. Özellikle yüksek hacimli veya yüksek riskli kategorilerde çözüm sürecinin gecikmesi, kurumun müşteri odaklılık algısı üzerinde baskı oluşturabilir. Bu nedenle şeffaf bilgilendirme, hızlı geri dönüş ve ölçülebilir iyileştirme adımları kurumsal itibarın korunması açısından önem taşımaktadır.
 
 KISA VADELİ AKSİYONLAR
 
-• ${card.action}
-• Kritik kayıtlar öncelikli olarak ilgili birime yönlendirilmeli.
-• Aynı kategoriye ait yeni şikayetler günlük olarak izlenmeli.
+İlk aşamada ${card.action} Ayrıca kritik kayıtların ilgili birime öncelikli olarak yönlendirilmesi ve aynı kategoriye ait yeni şikayetlerin günlük olarak izlenmesi önerilmektedir. Müşteriye ilk dönüş süresinin kısaltılması, şikayet yönetim sürecinin daha görünür hale getirilmesi ve mevcut vakaların durum bazlı takip edilmesi kısa vadeli öncelikler arasında yer almalıdır.
 
 ORTA VADELİ AKSİYONLAR
 
-• Tekrarlayan sorunlar için süreç iyileştirme çalışması başlatılmalı.
-• Kategori bazlı performans göstergeleri düzenli olarak raporlanmalı.
-• Müşteri bilgilendirme süreci standart hale getirilmeli.
+Orta vadede tekrar eden problem alanları için süreç iyileştirme çalışması başlatılmalıdır. Kategori bazlı performans göstergeleri düzenli olarak raporlanmalı, ilgili ekiplerin iş yükü ve çözüm kapasitesi değerlendirilmelidir. Müşteri bilgilendirme süreci standart hale getirilmeli ve benzer şikayetlerin yeniden oluşmasını önlemek için kontrol mekanizmaları güçlendirilmelidir.
 
-SORUMLU BİRİM
+UZUN VADELİ İYİLEŞTİRME PLANI
 
-${card.unit}
+Uzun vadede bu kategori için veri odaklı izleme ve erken uyarı mekanizması kurulması önerilmektedir. Tekrarlayan şikayetlerin kök nedenleri belirli periyotlarla yeniden analiz edilmeli ve süreç sahipleriyle paylaşılmalıdır. Böylece sistem yalnızca mevcut şikayetleri çözmekle kalmayıp, benzer problemlerin tekrar oluşmasını önleyen self-healing bir karar destek yapısına dönüşebilir.
 
-BAŞARI ÖLÇÜTLERİ
+SORUMLU BİRİMLER
 
-• 14 gün içinde aynı kategoriye ait yeni şikayet sayısında azalma.
-• Ortalama müşteri yanıt süresinde iyileşme.
-• Kritik riskli kayıtların çözüm süresinde düşüş.`;
+Birincil sorumlu birim ${card.unit} olarak belirlenmiştir. Bununla birlikte müşteri deneyimi, operasyon, kalite ve teknik ekiplerin de sürece destek vermesi önerilmektedir. İyileştirme adımlarının başarılı olabilmesi için birimler arası koordinasyon sağlanmalı ve aksiyonların ilerleme durumu düzenli olarak izlenmelidir.
+
+BAŞARI GÖSTERGELERİ
+
+Başarı ölçümü için aynı kategoriye ait yeni şikayet sayısı, ortalama çözüm süresi, müşteriye ilk dönüş süresi ve tekrar eden şikayet oranı takip edilmelidir. Kısa vadede kritik kayıtların çözüm süresinde azalma, orta vadede şikayet hacminde düşüş ve uzun vadede risk skorunda kalıcı iyileşme hedeflenmelidir. Bu göstergeler, aksiyon planının etkisini ölçmek için düzenli raporlanmalıdır.
+
+BEKLENEN KAZANIMLAR
+
+Bu aksiyon planının uygulanmasıyla müşteri geri bildirimlerinin daha hızlı yönetilmesi, operasyonel süreçlerin daha ölçülebilir hale gelmesi ve riskli kategorilerde iyileşme sağlanması beklenmektedir. Sürecin düzenli takip edilmesi, müşteri memnuniyetinin artırılmasına ve kurumsal güven algısının korunmasına katkı sağlayacaktır. Bu aksiyon planı, ölçülebilir risk azaltımı ve sürdürülebilir müşteri memnuniyeti artışı sağlamayı hedeflemektedir.`;
 }
 
 function convertCSVToHealingCards(csv: string): HealingCard[] {
