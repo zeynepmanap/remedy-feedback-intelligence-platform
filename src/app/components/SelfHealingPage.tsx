@@ -1,0 +1,972 @@
+import { useEffect, useState } from "react";
+import {
+  CheckCircle2,
+  Clock,
+  PlayCircle,
+  Search,
+  AlertTriangle,
+  Cpu,
+  Lightbulb,
+  Activity,
+  CheckCheck,
+  ChevronRight,
+  FileText,
+  Save,
+  Trash2,
+} from "lucide-react";
+
+type HealingStatus = "Uygulanıyor" | "Tamamlandı" | "Planlandı" | "İzlemede";
+
+interface HealingCard {
+  id: string;
+  category: string;
+  risk: number;
+  count: number;
+  detection: string;
+  rootCause: string;
+  action: string;
+  unit: string;
+  status: HealingStatus;
+  date: string;
+  result?: string;
+  plan?: string;
+  saved?: boolean;
+}
+
+const statusCfg: Record<HealingStatus, { color: string; bg: string; icon: React.ReactNode }> = {
+  Uygulanıyor: { color: "#1E5AA8", bg: "#DBEAFE", icon: <PlayCircle size={12} /> },
+  Tamamlandı: { color: "#166534", bg: "#DCFCE7", icon: <CheckCircle2 size={12} /> },
+  Planlandı: { color: "#92400E", bg: "#FEF3C7", icon: <Clock size={12} /> },
+  İzlemede: { color: "#6D28D9", bg: "#EDE9FE", icon: <Activity size={12} /> },
+};
+
+const riskColor = (r: number) =>
+  r >= 80 ? "#DC2626" : r >= 60 ? "#D97706" : r >= 40 ? "#1E5AA8" : "#16A34A";
+
+const FLOW_STEPS = [
+  { icon: <Search size={14} />, label: "Sorun Tespit Edildi" },
+  { icon: <AlertTriangle size={14} />, label: "Risk Analizi Yapıldı" },
+  { icon: <Cpu size={14} />, label: "Kök Neden Belirlendi" },
+  { icon: <Lightbulb size={14} />, label: "Aksiyon Önerildi" },
+  { icon: <Activity size={14} />, label: "İzleme Başlatıldı" },
+  { icon: <CheckCheck size={14} />, label: "Sonuç Değerlendirildi" },
+];
+function cleanPlanText(text: string) {
+  return (text || "")
+    .replace(/Here is.*?Turkish\.?/gi, "")
+    .replace(/Türkçe Aksiyon Planı:.*?\n?/gi, "")
+    .replace(/\*\*/g, "")
+    .replace(/###/g, "")
+    .replace(/##/g, "")
+    .replace(/#/g, "")
+    .replace(/\*/g, "•")
+    .replace(/\s+(YÖNETİCİ ÖZETİ)/g, "\n\n$1")
+    .replace(/\s+(KÖK NEDEN ANALİZİ)/g, "\n\n$1")
+    .replace(/\s+(MÜŞTERİ DENEYİMİNE ETKİSİ)/g, "\n\n$1")
+    .replace(/\s+(OPERASYONEL ETKİLER)/g, "\n\n$1")
+    .replace(/\s+(KURUMSAL İTİBARA ETKİSİ)/g, "\n\n$1")
+    .replace(/\s+(KISA VADELİ AKSİYONLAR)/g, "\n\n$1")
+    .replace(/\s+(ORTA VADELİ AKSİYONLAR)/g, "\n\n$1")
+    .replace(/\s+(UZUN VADELİ İYİLEŞTİRME PLANI)/g, "\n\n$1")
+    .replace(/\s+(SORUMLU BİRİMLER)/g, "\n\n$1")
+    .replace(/\s+(BAŞARI GÖSTERGELERİ)/g, "\n\n$1")
+    .replace(/\s+(BEKLENEN KAZANIMLAR)/g, "\n\n$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizeText(value: string) {
+  return value.replace(/^\uFEFF/, "").trim();
+}
+
+function normalizeHeader(value: string) {
+  return value
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .toLowerCase()
+    .replaceAll("ı", "i")
+    .replaceAll("ş", "s")
+    .replaceAll("ğ", "g")
+    .replaceAll("ü", "u")
+    .replaceAll("ö", "o")
+    .replaceAll("ç", "c")
+    .replaceAll("_", " ")
+    .replaceAll("-", " ");
+}
+
+function detectDelimiter(text: string) {
+  const firstLine = text.split(/\r?\n/).find((line) => line.trim().length > 0) || "";
+
+  const counts = [
+    { delimiter: ";", count: (firstLine.match(/;/g) || []).length },
+    { delimiter: ",", count: (firstLine.match(/,/g) || []).length },
+    { delimiter: "\t", count: (firstLine.match(/\t/g) || []).length },
+    { delimiter: "|", count: (firstLine.match(/\|/g) || []).length },
+  ];
+
+  counts.sort((a, b) => b.count - a.count);
+  return counts[0].count > 0 ? counts[0].delimiter : ",";
+}
+
+function parseCSV(text: string): string[][] {
+  let cleanedText = text.replace(/^\uFEFF/, "");
+
+  if (cleanedText.toLowerCase().startsWith("sep=")) {
+    cleanedText = cleanedText.split(/\r?\n/).slice(1).join("\n");
+  }
+
+  const delimiter = detectDelimiter(cleanedText);
+  const rows: string[][] = [];
+
+  let current = "";
+  let row: string[] = [];
+  let insideQuotes = false;
+
+  for (let i = 0; i < cleanedText.length; i++) {
+    const char = cleanedText[i];
+    const next = cleanedText[i + 1];
+
+    if (char === '"' && insideQuotes && next === '"') {
+      current += '"';
+      i++;
+    } else if (char === '"') {
+      insideQuotes = !insideQuotes;
+    } else if (char === delimiter && !insideQuotes) {
+      row.push(normalizeText(current));
+      current = "";
+    } else if ((char === "\n" || char === "\r") && !insideQuotes) {
+      if (current || row.length > 0) {
+        row.push(normalizeText(current));
+        rows.push(row);
+        row = [];
+        current = "";
+      }
+
+      if (char === "\r" && next === "\n") i++;
+    } else {
+      current += char;
+    }
+  }
+
+  if (current || row.length > 0) {
+    row.push(normalizeText(current));
+    rows.push(row);
+  }
+
+  return rows.filter((row) => row.join("").trim().length > 0);
+}
+
+function findColumn(header: string[], names: string[]) {
+  const normalizedNames = names.map(normalizeHeader);
+
+  return header.findIndex((h) =>
+    normalizedNames.some((name) => normalizeHeader(h).includes(name))
+  );
+}
+
+function getActiveCSV() {
+  const activeId = localStorage.getItem("remedy_active_dataset_id");
+
+  if (activeId) {
+    const activeContent = localStorage.getItem(`remedy_dataset_content_${activeId}`);
+    if (activeContent) return activeContent;
+  }
+
+  return localStorage.getItem("remedy_uploaded_csv") || "";
+}
+
+function getCategory(text: string): string {
+  const t = normalizeHeader(text);
+
+  if (
+    t.includes("kaza") ||
+    t.includes("fren") ||
+    t.includes("hava yastigi") ||
+    t.includes("emniyet") ||
+    t.includes("ani durma") ||
+    t.includes("guvenlik")
+  )
+    return "Güvenlik";
+
+  if (
+    t.includes("aku") ||
+    t.includes("batarya") ||
+    t.includes("pil") ||
+    t.includes("menzil") ||
+    t.includes("battery")
+  )
+    return "Batarya";
+
+  if (
+    t.includes("sarj") ||
+    t.includes("trugo") ||
+    t.includes("dc") ||
+    t.includes("istasyon") ||
+    t.includes("charging") ||
+    t.includes("charger")
+  )
+    return "Şarj";
+
+  if (
+    t.includes("yazilim") ||
+    t.includes("guncelleme") ||
+    t.includes("adas") ||
+    t.includes("truemore") ||
+    t.includes("dijital anahtar") ||
+    t.includes("uygulama") ||
+    t.includes("software") ||
+    t.includes("app")
+  )
+    return "Yazılım / Uygulama";
+
+  if (
+    t.includes("servis") ||
+    t.includes("randevu") ||
+    t.includes("musteri hizmetleri") ||
+    t.includes("ulasilamiyor") ||
+    t.includes("ulasamiyorum") ||
+    t.includes("cagri") ||
+    t.includes("destek")
+  )
+    return "Servis Süreci";
+
+  if (
+    t.includes("teslim") ||
+    t.includes("tescil") ||
+    t.includes("siparis") ||
+    t.includes("gecikme") ||
+    t.includes("bayi")
+  )
+    return "Teslimat";
+
+  if (
+    t.includes("ekran") ||
+    t.includes("donanim") ||
+    t.includes("ayna") ||
+    t.includes("sensor") ||
+    t.includes("kamera") ||
+    t.includes("kapi") ||
+    t.includes("multimedya")
+  )
+    return "Ekran / Donanım";
+
+  return "Genel Şikayet";
+}
+
+function getRiskScore(text: string, category: string): number {
+  const t = normalizeHeader(text);
+  let score = 4.2;
+
+  if (category === "Güvenlik") score += 4.4;
+  if (category === "Batarya") score += 3.4;
+  if (category === "Şarj") score += 2.8;
+  if (category === "Yazılım / Uygulama") score += 2.2;
+  if (category === "Servis Süreci") score += 2.0;
+  if (category === "Teslimat") score += 1.7;
+  if (category === "Ekran / Donanım") score += 1.8;
+
+  [
+    "calismadi",
+    "yolda kaldim",
+    "ani durdu",
+    "kaza",
+    "hava yastigi",
+    "fren",
+    "tehlike",
+    "magdur",
+    "ulasamiyorum",
+    "cevap yok",
+    "acil",
+    "ariza",
+    "sorun",
+    "problem",
+  ].forEach((word) => {
+    if (t.includes(word)) score += 0.35;
+  });
+
+  return Number(Math.min(score, 9.8).toFixed(1));
+}
+
+function getRootCause(category: string) {
+  switch (category) {
+    case "Batarya":
+      return "Akü/batarya yönetimi, BMS optimizasyonu veya menzil performansı kaynaklı teknik sorunlar.";
+    case "Şarj":
+      return "Şarj istasyonu uyumluluğu, bağlantı kesintisi veya termal eşik yönetimi kaynaklı problemler.";
+    case "Yazılım / Uygulama":
+      return "Yazılım güncellemesi, uygulama bağlantısı, ADAS veya dijital anahtar servislerinde kararsızlık.";
+    case "Servis Süreci":
+      return "Servis randevu kapasitesi, çağrı merkezi yoğunluğu ve müşteri bilgilendirme süreçlerinde aksama.";
+    case "Teslimat":
+      return "Teslim tarihi, tescil, bayi koordinasyonu ve proaktif bilgilendirme eksikliği.";
+    case "Ekran / Donanım":
+      return "Ekran, sensör, ayna, kapı veya donanım bileşenlerinde teknik kontrol ihtiyacı.";
+    case "Güvenlik":
+      return "Fren, hava yastığı, ani durma veya kaza riskine bağlı kritik güvenlik incelemesi ihtiyacı.";
+    default:
+      return "Müşteri deneyimini etkileyen genel operasyonel veya teknik sorunlar.";
+  }
+}
+
+function getAction(category: string) {
+  switch (category) {
+    case "Batarya":
+      return "Batarya sağlık taraması, BMS incelemesi ve servis önceliklendirme süreci başlatılsın.";
+    case "Şarj":
+      return "Şarj istasyonu uyumluluk testi, bağlantı kontrolü ve teknik inceleme süreci başlatılsın.";
+    case "Yazılım / Uygulama":
+      return "Yazılım güncelleme kontrolü, hata kayıt analizi ve uygulama bağlantı testi yapılsın.";
+    case "Servis Süreci":
+      return "Servis randevu kapasitesi artırılsın, çağrı merkezi yanıt süresi izlemeye alınsın.";
+    case "Teslimat":
+      return "Teslimat süreci için otomatik bilgilendirme ve bayi takip mekanizması oluşturulsun.";
+    case "Ekran / Donanım":
+      return "Donanım kontrol protokolü, ekran/sensör testi ve teknik servis incelemesi başlatılsın.";
+    case "Güvenlik":
+      return "Acil güvenlik incelemesi, teknik değerlendirme ve öncelikli servis yönlendirmesi yapılsın.";
+    default:
+      return "Şikayetler izleme listesine alınsın ve ilgili operasyon birimine yönlendirilsin.";
+  }
+}
+
+function getUnit(category: string) {
+  switch (category) {
+    case "Batarya":
+      return "Servis & Teknik";
+    case "Şarj":
+      return "Mühendislik";
+    case "Yazılım / Uygulama":
+      return "Yazılım Ekibi";
+    case "Servis Süreci":
+      return "Müşteri Deneyimi";
+    case "Teslimat":
+      return "Operasyon";
+    case "Ekran / Donanım":
+      return "Teknik Servis";
+    case "Güvenlik":
+      return "Güvenlik & Kalite";
+    default:
+      return "Operasyon";
+  }
+}
+
+function getFallbackPlan(card: HealingCard) {
+  return `DÜZELTİCİ FAALİYET PLANI
+
+KÖK NEDEN ÖZETİ
+
+${card.rootCause}
+
+KISA VADELİ AKSİYONLAR
+
+• ${card.action}
+• Kritik kayıtlar öncelikli olarak ilgili birime yönlendirilmeli.
+• Aynı kategoriye ait yeni şikayetler günlük olarak izlenmeli.
+
+ORTA VADELİ AKSİYONLAR
+
+• Tekrarlayan sorunlar için süreç iyileştirme çalışması başlatılmalı.
+• Kategori bazlı performans göstergeleri düzenli olarak raporlanmalı.
+• Müşteri bilgilendirme süreci standart hale getirilmeli.
+
+SORUMLU BİRİM
+
+${card.unit}
+
+BAŞARI ÖLÇÜTLERİ
+
+• 14 gün içinde aynı kategoriye ait yeni şikayet sayısında azalma.
+• Ortalama müşteri yanıt süresinde iyileşme.
+• Kritik riskli kayıtların çözüm süresinde düşüş.`;
+}
+
+function convertCSVToHealingCards(csv: string): HealingCard[] {
+  const parsed = parseCSV(csv);
+  if (parsed.length === 0) return [];
+
+  const firstRow = parsed[0].map(normalizeHeader);
+
+  const knownHeaders = [
+    "title",
+    "text",
+    "baslik",
+    "sikayet",
+    "sikayet basligi",
+    "sikayet metni",
+    "metin",
+    "aciklama",
+    "description",
+    "comment",
+    "yorum",
+    "content",
+    "complaint",
+    "body",
+    "review",
+    "message",
+    "konu",
+  ];
+
+  const hasHeader = firstRow.some((h) =>
+    knownHeaders.some((known) => h.includes(known))
+  );
+
+  const header = hasHeader ? parsed[0] : [];
+  const dataRows = hasHeader ? parsed.slice(1) : parsed;
+
+  const titleIndex = hasHeader
+    ? findColumn(header, [
+        "title",
+        "başlık",
+        "baslik",
+        "şikayet",
+        "sikayet",
+        "şikayet başlığı",
+        "sikayet basligi",
+        "konu",
+        "subject",
+      ])
+    : -1;
+
+  const textIndex = hasHeader
+    ? findColumn(header, [
+        "text",
+        "metin",
+        "açıklama",
+        "aciklama",
+        "description",
+        "şikayet metni",
+        "sikayet metni",
+        "yorum",
+        "comment",
+        "content",
+        "complaint",
+        "body",
+        "review",
+        "message",
+      ])
+    : -1;
+
+  const grouped: Record<string, { count: number; totalRisk: number }> = {};
+
+  dataRows.forEach((cols) => {
+    const cleanedCols = cols.map((c) => normalizeText(c)).filter((c) => c.length > 0);
+    const fallbackText = cleanedCols.join(" ").trim();
+
+    if (fallbackText.length < 4) return;
+
+    const title =
+      titleIndex >= 0
+        ? cols[titleIndex] || fallbackText.slice(0, 100)
+        : cleanedCols[1] || cleanedCols[0] || fallbackText.slice(0, 100);
+
+    const text =
+      textIndex >= 0
+        ? cols[textIndex] || fallbackText
+        : cleanedCols.slice(1).join(" ") || cleanedCols[0] || fallbackText;
+
+    const fullText = `${title} ${text} ${fallbackText}`.trim();
+
+    const category = getCategory(fullText);
+    const risk = getRiskScore(fullText, category);
+
+    if (!grouped[category]) grouped[category] = { count: 0, totalRisk: 0 };
+
+    grouped[category].count += 1;
+    grouped[category].totalRisk += risk;
+  });
+
+  const values = Object.values(grouped);
+  if (values.length === 0) return [];
+
+  const maxCount = Math.max(...values.map((g) => g.count), 1);
+
+  return Object.entries(grouped)
+    .map(([category, info], index) => {
+      const avgRisk = info.totalRisk / info.count;
+      const volumeEffect = (info.count / maxCount) * 20;
+      const risk = Math.min(Math.round(avgRisk * 8 + volumeEffect), 98);
+
+      const status: HealingStatus =
+        risk >= 80 ? "Uygulanıyor" : risk >= 65 ? "Planlandı" : risk >= 45 ? "İzlemede" : "Tamamlandı";
+
+      return {
+        id: `SH-${String(index + 1).padStart(4, "0")}`,
+        category,
+        risk,
+        count: info.count,
+        detection: `${category} kategorisinde ${info.count} kayıt tespit edildi. Risk yoğunluğu ${risk}/100 olarak hesaplandı.`,
+        rootCause: getRootCause(category),
+        action: getAction(category),
+        unit: getUnit(category),
+        status,
+        date: new Date().toLocaleDateString("tr-TR"),
+        result: status === "Tamamlandı" ? "Kategori düşük risk seviyesinde izleniyor." : undefined,
+      };
+    })
+    .sort((a, b) => b.risk - a.risk);
+}
+
+export function SelfHealingPage() {
+  const [cards, setCards] = useState<HealingCard[]>([]);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const savedCSV = getActiveCSV();
+    const savedPlans = localStorage.getItem("remedy_saved_action_plans");
+
+    if (savedCSV) {
+      let generatedCards = convertCSVToHealingCards(savedCSV);
+
+      if (savedPlans) {
+        const parsedPlans = JSON.parse(savedPlans) as Record<string, string>;
+
+        generatedCards = generatedCards.map((card) => {
+          if (parsedPlans[card.category]) {
+            return {
+              ...card,
+              plan: parsedPlans[card.category],
+              saved: true,
+            };
+          }
+
+          return card;
+        });
+      }
+
+      setCards(generatedCards);
+    } else {
+      setCards([]);
+    }
+  }, []);
+
+  const savedPlanTotal = cards.filter((c) => c.saved || c.plan).length;
+  const criticalRiskTotal = cards.filter((c) => c.risk >= 80).length;
+  const avgRisk =
+    cards.length > 0
+      ? Math.round(cards.reduce((sum, c) => sum + c.risk, 0) / cards.length)
+      : 0;
+
+  const summaryCards = [
+    {
+      label: "Risk Kategorisi",
+      value: cards.length.toString(),
+      sub: "Analiz edilen kategori",
+      color: "#1E5AA8",
+      bg: "#EFF6FF",
+    },
+    {
+      label: "Kritik Risk",
+      value: criticalRiskTotal.toString(),
+      sub: "Risk skoru ≥ 80",
+      color: "#DC2626",
+      bg: "#FEF2F2",
+    },
+    {
+      label: "Kaydedilen Plan",
+      value: savedPlanTotal.toString(),
+      sub: "Oluşturulan aksiyon",
+      color: "#16A34A",
+      bg: "#F0FDF4",
+    },
+    {
+      label: "Ortalama Risk",
+      value: avgRisk.toString(),
+      sub: "Kategori ortalaması",
+      color: "#7C3AED",
+      bg: "#F5F3FF",
+    },
+  ];
+
+  const createActionPlan = async (card: HealingCard) => {
+    setLoadingId(card.id);
+
+const prompt = `
+GÖREV:
+Aşağıdaki şikayet/veri özetine göre üst düzey yönetime sunulabilecek profesyonel, analitik ve uygulanabilir bir aksiyon planı hazırla.
+
+YAZIM KURALLARI:
+- Sadece Türkçe yaz.
+- İngilizce giriş cümlesi yazma.
+- "Here is", "in Turkish", "Türkçe aksiyon planı", "rolüm gereği" gibi ifadeler kullanma.
+- ROL, GÖREV, VERİLER veya TALİMAT başlıklarını çıktıya dahil etme.
+- Markdown, yıldız, çizgi süsleme veya kod bloğu kullanma.
+- Emir kipi kullanma. “Yapın, başlatın” yerine “başlatılması önerilir”, “uygulanmalıdır”, “izlenmelidir” ifadelerini kullan.
+- Aynı cümleyi tekrar etme.
+- Kategori adını sürekli tekrar etme.
+- Genel geçer cümleler kurma; veriyi yorumla.
+- Kesin zarar verdi deme; “risk oluşturabilir”, “olumsuz etki yaratabilir” gibi kurumsal ve temkinli dil kullan.
+- Her başlık altında 3-5 cümle yaz.
+- Yönetim kurulu sunumuna uygun, uzman danışmanlık raporu tonunda yaz.
+- Şikayet sayısı, risk skoru ve sorumlu birim arasında ilişki kur.
+- Başarı göstergeleri ölçülebilir KPI şeklinde olsun.
+- Beklenen kazanımlar olumlu ve stratejik fayda olarak yazılsın.
+- Raporu mutlaka BEKLENEN KAZANIMLAR başlığını tamamlayarak bitir.
+- Son cümle “Bu aksiyon planı, ölçülebilir risk azaltımı ve sürdürülebilir müşteri memnuniyeti artışı sağlamayı hedeflemektedir.” olsun.
+
+RİSK YORUMU:
+Risk skoru 80 ve üzerindeyse kritik öncelikli risk olarak değerlendir.
+Risk skoru 60-79 arasındaysa yüksek risk olarak değerlendir.
+Risk skoru 40-59 arasındaysa orta risk olarak değerlendir.
+Risk skoru 40 altındaysa düşük risk olarak değerlendir.
+
+ÇIKTI BAŞLIKLARI:
+
+YÖNETİCİ ÖZETİ
+
+KÖK NEDEN ANALİZİ
+
+MÜŞTERİ DENEYİMİNE ETKİSİ
+
+OPERASYONEL ETKİLER
+
+KURUMSAL İTİBARA ETKİSİ
+
+KISA VADELİ AKSİYONLAR
+
+ORTA VADELİ AKSİYONLAR
+
+UZUN VADELİ İYİLEŞTİRME PLANI
+
+SORUMLU BİRİMLER
+
+BAŞARI GÖSTERGELERİ
+
+BEKLENEN KAZANIMLAR
+
+VERİ:
+Kategori: ${card.category}
+Risk Skoru: ${card.risk}/100
+Şikayet Sayısı: ${card.count}
+Tespit: ${card.detection}
+Kök Neden: ${card.rootCause}
+Mevcut Aksiyon: ${card.action}
+Sorumlu Birim: ${card.unit}
+
+RAPORU DOĞRUDAN YÖNETİCİ ÖZETİ BAŞLIĞIYLA BAŞLAT.
+`;
+
+    try {
+      const response = await fetch("http://localhost:11434/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "qwen3:8b",
+          prompt: prompt,
+          stream: false,
+          options: {
+            temperature: 0.35,
+            num_predict: 3000,
+          },
+        }),
+      });
+
+      if (!response.ok) throw new Error("Llama yanıt vermedi.");
+
+      const data = await response.json();
+      const plan = cleanPlanText(data.response || getFallbackPlan(card));
+
+      setCards((prev) =>
+        prev.map((item) =>
+          item.id === card.id ? { ...item, plan, saved: false } : item
+        )
+      );
+    } catch {
+      const plan = getFallbackPlan(card);
+
+      setCards((prev) =>
+        prev.map((item) =>
+          item.id === card.id ? { ...item, plan, saved: false } : item
+        )
+      );
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
+  const saveActionPlan = (card: HealingCard) => {
+    if (!card.plan) return;
+
+    const savedPlansRaw = localStorage.getItem("remedy_saved_action_plans");
+    const savedPlans = savedPlansRaw ? JSON.parse(savedPlansRaw) : {};
+
+    savedPlans[card.category] = card.plan;
+    localStorage.setItem("remedy_saved_action_plans", JSON.stringify(savedPlans));
+
+    setCards((prev) =>
+      prev.map((item) =>
+        item.id === card.id ? { ...item, saved: true } : item
+      )
+    );
+
+    alert(`${card.category} kategorisi için aksiyon planı kaydedildi.`);
+  };
+
+  const deleteActionPlan = (card: HealingCard) => {
+    const confirmDelete = window.confirm(
+      `${card.category} kategorisine ait kayıtlı aksiyon planını silmek istediğine emin misin?`
+    );
+
+    if (!confirmDelete) return;
+
+    const savedPlansRaw = localStorage.getItem("remedy_saved_action_plans");
+    const savedPlans = savedPlansRaw ? JSON.parse(savedPlansRaw) : {};
+
+    delete savedPlans[card.category];
+    localStorage.setItem("remedy_saved_action_plans", JSON.stringify(savedPlans));
+
+    setCards((prev) =>
+      prev.map((item) =>
+        item.id === card.id
+          ? { ...item, plan: undefined, saved: false }
+          : item
+      )
+    );
+
+    alert(`${card.category} kategorisine ait aksiyon planı silindi.`);
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 style={{ color: "#0F172A", fontSize: "22px", fontWeight: 700, letterSpacing: "-0.3px" }}>
+          İyileştirme Merkezi
+        </h1>
+        <p style={{ fontSize: "13.5px", color: "#64748B", marginTop: "4px" }}>
+          Risk analizi sonucunda tespit edilen sorunlar için kök neden ve aksiyon planı oluşturma ekranı.
+        </p>
+      </div>
+
+      <div
+        className="rounded-xl p-5"
+        style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}
+      >
+        <div style={{ fontSize: "12px", fontWeight: 600, color: "#94A3B8", letterSpacing: "0.06em", marginBottom: "16px" }}>
+          İYİLEŞTİRME AKIŞ DİYAGRAMI
+        </div>
+
+        <div className="flex items-center gap-0">
+          {FLOW_STEPS.map((step, i) => (
+            <div key={step.label} className="flex items-center">
+              <div className="flex flex-col items-center gap-2">
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center"
+                  style={{
+                    background: i < 4 ? "#123458" : i === 4 ? "#1E5AA8" : "#16A34A",
+                    color: "#fff",
+                  }}
+                >
+                  {step.icon}
+                </div>
+                <span style={{ fontSize: "10.5px", color: "#64748B", fontWeight: 500, textAlign: "center", maxWidth: "80px", lineHeight: 1.3 }}>
+                  {step.label}
+                </span>
+              </div>
+
+              {i < FLOW_STEPS.length - 1 && (
+                <div className="flex items-center mb-5 mx-1">
+                  <div className="h-px w-8" style={{ background: "#CBD5E1" }} />
+                  <ChevronRight size={12} style={{ color: "#CBD5E1", flexShrink: 0 }} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 gap-3">
+        {summaryCards.map((item) => (
+          <div
+            key={item.label}
+            className="rounded-xl p-4"
+            style={{
+              background: item.bg,
+              border: `1px solid ${item.color}25`,
+            }}
+          >
+            <div style={{ fontSize: "22px", fontWeight: 800, color: item.color }}>
+              {item.value}
+            </div>
+
+            <div style={{ fontSize: "12px", fontWeight: 700, color: item.color, marginTop: "3px" }}>
+              {item.label}
+            </div>
+
+            <div style={{ fontSize: "11px", color: item.color, opacity: 0.75, marginTop: "2px" }}>
+              {item.sub}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {cards.length === 0 ? (
+        <div className="rounded-xl p-8 text-center" style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", color: "#94A3B8" }}>
+          Henüz veri yok. Önce Veri Kaynakları sayfasından CSV yükleyin.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {cards.map((card) => {
+            const sc = statusCfg[card.status];
+            const rc = riskColor(card.risk);
+
+            return (
+              <div
+                key={card.id}
+                className="rounded-xl p-5"
+                style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}
+              >
+                <div className="grid grid-cols-12 gap-5">
+                  <div className="col-span-1 flex flex-col items-center justify-center gap-1">
+                    <div className="relative w-12 h-12">
+                      <svg viewBox="0 0 48 48" className="w-full h-full">
+                        <circle cx="24" cy="24" r="19" fill="none" stroke="#F1F5F9" strokeWidth="4" />
+                        <circle
+                          cx="24"
+                          cy="24"
+                          r="19"
+                          fill="none"
+                          stroke={rc}
+                          strokeWidth="4"
+                          strokeDasharray={`${(card.risk / 100) * 119.4} 119.4`}
+                          strokeLinecap="round"
+                          transform="rotate(-90 24 24)"
+                        />
+                      </svg>
+
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span style={{ fontSize: "12px", fontWeight: 800, color: rc }}>{card.risk}</span>
+                      </div>
+                    </div>
+
+                    <span style={{ fontSize: "9px", color: "#94A3B8", textAlign: "center" }}>Risk</span>
+                  </div>
+
+                  <div className="col-span-9 flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <span style={{ fontSize: "11px", fontWeight: 700, color: "#94A3B8" }}>{card.id}</span>
+
+                      <span
+                        className="px-2 py-0.5 rounded font-semibold"
+                        style={{ fontSize: "11px", background: "#F1F5F9", color: "#334155" }}
+                      >
+                        {card.category}
+                      </span>
+
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded font-semibold" style={{ fontSize: "11px", ...sc }}>
+                        {sc.icon} {card.status}
+                      </span>
+
+                      <span style={{ fontSize: "11px", color: "#94A3B8", marginLeft: "auto" }}>{card.date}</span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="p-3 rounded-lg" style={{ background: "#FEF2F2", border: "1px solid #FECACA" }}>
+                        <div className="flex items-center gap-1 mb-1">
+                          <Search size={11} style={{ color: "#DC2626" }} />
+                          <span style={{ fontSize: "10px", fontWeight: 700, color: "#DC2626", letterSpacing: "0.04em" }}>TESPİT</span>
+                        </div>
+                        <p style={{ fontSize: "12px", color: "#374151", lineHeight: 1.5 }}>{card.detection}</p>
+                      </div>
+
+                      <div className="p-3 rounded-lg" style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}>
+                        <div className="flex items-center gap-1 mb-1">
+                          <Cpu size={11} style={{ color: "#D97706" }} />
+                          <span style={{ fontSize: "10px", fontWeight: 700, color: "#D97706", letterSpacing: "0.04em" }}>KÖK NEDEN</span>
+                        </div>
+                        <p style={{ fontSize: "12px", color: "#374151", lineHeight: 1.5 }}>{card.rootCause}</p>
+                      </div>
+
+                      <div className="p-3 rounded-lg" style={{ background: "#F0FDF4", border: "1px solid #BBF7D0" }}>
+                        <div className="flex items-center gap-1 mb-1">
+                          <Lightbulb size={11} style={{ color: "#16A34A" }} />
+                          <span style={{ fontSize: "10px", fontWeight: 700, color: "#16A34A", letterSpacing: "0.04em" }}>ÖNERİLEN AKSİYON</span>
+                        </div>
+                        <p style={{ fontSize: "12px", color: "#374151", lineHeight: 1.5 }}>{card.action}</p>
+                      </div>
+                    </div>
+
+                    {card.plan && (
+                      <div className="p-4 rounded-lg whitespace-pre-line" style={{ background: "#F8FAFC", border: "1px solid #CBD5E1" }}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <FileText size={14} style={{ color: "#123458" }} />
+                            <span style={{ fontSize: "12px", fontWeight: 700, color: "#123458" }}>Oluşturulan Aksiyon Planı</span>
+                          </div>
+
+                          {card.saved && (
+                            <span
+                              className="px-2 py-0.5 rounded"
+                              style={{ fontSize: "11px", fontWeight: 600, color: "#166534", background: "#DCFCE7" }}
+                            >
+                              Kaydedildi
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ fontSize: "12px", color: "#334155", lineHeight: 1.6 }}>{card.plan}</div>
+                      </div>
+                    )}
+
+                    {card.result && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "#F0FDF4", border: "1px solid #BBF7D0" }}>
+                        <CheckCheck size={13} style={{ color: "#16A34A" }} />
+                        <span style={{ fontSize: "12px", color: "#166534", fontWeight: 500 }}>{card.result}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="col-span-2 flex flex-col items-end justify-start gap-3">
+                    <div className="text-right">
+                      <div style={{ fontSize: "10px", color: "#94A3B8" }}>Sorumlu Birim</div>
+                      <div style={{ fontSize: "12px", fontWeight: 600, color: "#334155", marginTop: "2px" }}>{card.unit}</div>
+                    </div>
+
+                    <button
+                      onClick={() => createActionPlan(card)}
+                      disabled={loadingId === card.id}
+                      className="px-3 py-2 rounded-md text-white text-xs font-semibold transition-opacity hover:opacity-90 disabled:opacity-60"
+                      style={{ background: "#123458" }}
+                    >
+                      {loadingId === card.id ? "Oluşturuluyor..." : "Aksiyon Planı Oluştur"}
+                    </button>
+
+                    {card.plan && (
+                      <button
+                        onClick={() => saveActionPlan(card)}
+                        className="flex items-center gap-1 px-3 py-2 rounded-md text-xs font-semibold transition-opacity hover:opacity-90"
+                        style={{
+                          background: card.saved ? "#DCFCE7" : "#F8FAFC",
+                          border: card.saved ? "1px solid #86EFAC" : "1px solid #CBD5E1",
+                          color: card.saved ? "#166534" : "#123458",
+                        }}
+                      >
+                        <Save size={12} />
+                        {card.saved ? "Kaydedildi" : "Planı Kaydet"}
+                      </button>
+                    )}
+
+                    {card.saved && (
+                      <button
+                        onClick={() => deleteActionPlan(card)}
+                        className="flex items-center gap-1 px-3 py-2 rounded-md text-xs font-semibold transition-opacity hover:opacity-90"
+                        style={{
+                          background: "#FEF2F2",
+                          border: "1px solid #FECACA",
+                          color: "#DC2626",
+                        }}
+                      >
+                        <Trash2 size={12} />
+                        Planı Sil
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
