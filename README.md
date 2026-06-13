@@ -143,6 +143,10 @@ Bu proje, Yönetim Bilişim Sistemleri bölümü kapsamında geliştirilen döne
 Projenin amacı; müşteri geri bildirimlerinden elde edilen verileri kullanarak risk analizi, kök neden tespiti ve yapay zeka destekli iyileştirme süreçlerini tek bir platform altında birleştirmektir.
 
 ---
+<img width="1440" height="813" alt="2" src="https://github.com/user-attachments/assets/700e88fc-fa58-4235-bcff-4b6a60ef4be1" />
+<img width="1440" height="808" alt="1" src="https://github.com/user-attachments/assets/d3ef2ffe-6a62-4ed0-a373-5523db30914c" />
+
+---
 
 ## Geliştirici
 
