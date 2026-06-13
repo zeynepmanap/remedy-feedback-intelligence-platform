@@ -1,5 +1,5 @@
 
-# REMEDY – Feedback Intelligence & Self-Healing Decision Platform
+##REMEDY – Yapay Zeka Destekli Müşteri Geri Bildirimi Risk Analizi ve Self-Healing Karar Destek Platformu
 
 ## Proje Hakkında
 
@@ -158,6 +158,8 @@ Proje kapsamında gösterim amacıyla aşağıdaki örnek veri setleri kullanıl
 
 ---
 
+Proje kapsamında geliştirilen REMEDY platformu, müşteri geri bildirimlerini yalnızca analiz eden bir sistem değil; riskleri erken tespit eden, kök nedenleri belirleyen ve self-healing yaklaşımıyla düzeltici faaliyet önerileri üreten bütünleşik bir karar destek platformu olarak tasarlanmıştır.
+
 ## Proje Ekibi
 
 - Zeynep MANAP
@@ -172,4 +174,7 @@ Dr. Öğr. Üyesi Hüseyin PARMAKSIZ
 
 Bilecik Şeyh Edebali Üniversitesi
 Yönetim Bilişim Sistemleri Bölümü
+
+
+
 2026
