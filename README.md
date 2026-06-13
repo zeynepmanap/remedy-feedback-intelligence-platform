@@ -1,4 +1,4 @@
-<img width="1440" height="812" alt="Ekran Resmi 2026-06-13 19 06 06" src="https://github.com/user-attachments/assets/affbeea6-9112-4fea-b218-1fb425152bef" />
+
 # REMEDY – Feedback Intelligence & Self-Healing Decision Platform
 
 ## Proje Hakkında
