@@ -147,18 +147,6 @@ Projenin amacı; müşteri geri bildirimlerinden elde edilen verileri kullanarak
 <img width="1440" height="813" alt="2" src="https://github.com/user-attachments/assets/700e88fc-fa58-4235-bcff-4b6a60ef4be1" />
 <img width="1440" height="808" alt="1" src="https://github.com/user-attachments/assets/d3ef2ffe-6a62-4ed0-a373-5523db30914c" />
 <img width="1439" height="805" alt="Ekran Resmi 2026-06-13 19 04 29" src="https://github.com/user-attachments/assets/fdaa25b8-c7c4-461d-9bd7-bca28c7e5fb3" />
-<img width="1434" height="809" alt="Ekran Resmi 2026-06-13 19 05 19" src="https://github.com/user-attachments/assets/da04cea3-d023-486c-932e-00c5f3d715ff" />
-<img width="1440" height="813" alt="Ekran Resmi 2026-06-13 19 05 26" src="https://github.com/user-attachments/assets/521161c4-4cca-4c7f-9ebe-b31c5bca0428" />
-<img width="1440" height="812" alt="Ekran Resmi 2026-06-13 19 05 33" src="https://github.com/user-attachments/assets/b69e5b53-3ab4-461a-8465-e95792d614d7" />
-<img width="1440" height="815" alt="Ekran Resmi 2026-06-13 19 05 40" src="https://github.com/user-attachments/assets/67a0352c-f898-42f8-9772-950d0268416e" />
-<img width="1440" height="809" alt="Ekran Resmi 2026-06-13 19 05 50" src="https://github.com/user-attachments/assets/ff83159e-5df8-46a9-8bce-c12f96d44282" />
-<img width="1440" height="808" alt="Ekran Resmi 2026-06-13 19 06 00" src="https://github.com/user-attachments/assets/a82be31b-9571-4b94-8e1b-069ec02bcbd0" />
-<img width="1440" height="812" alt="Ekran Resmi 2026-06-13 19 06 06" src="https://github.com/user-attachments/assets/da191a50-c86e-4fdb-b7dd-072c995d0634" />
-<img width="1437" height="813" alt="Ekran Resmi 2026-06-13 19 06 15" src="https://github.com/user-attachments/assets/5448be73-7a97-421d-bb41-52949e72452e" />
-
-
-
-
 
 
 ---
