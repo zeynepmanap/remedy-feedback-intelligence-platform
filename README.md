@@ -143,6 +143,13 @@ Bu proje, Yönetim Bilişim Sistemleri bölümü kapsamında geliştirilen döne
 
 Projenin amacı; müşteri geri bildirimlerinden elde edilen verileri kullanarak risk analizi, kök neden tespiti ve yapay zeka destekli iyileştirme süreçlerini tek bir platform altında birleştirmektir.
 
+## Demo Veri Setleri
+
+Proje kapsamında gösterim amacıyla aşağıdaki örnek veri setleri kullanılmaktadır:
+
+- TOGG Müşteri Şikayetleri Veri Seti
+- Tesla Müşteri Şikayetleri Veri Seti
+  
 ---
 
 <img width="1440" height="808" alt="1" src="https://github.com/user-attachments/assets/d3ef2ffe-6a62-4ed0-a373-5523db30914c" />
@@ -151,8 +158,18 @@ Projenin amacı; müşteri geri bildirimlerinden elde edilen verileri kullanarak
 
 ---
 
-## Geliştirici
+## Proje Ekibi
 
-Zeynep MANAP, Şeyma SİHİR
+- Zeynep MANAP
+- Şeyma SİHİR
 
+## Akademik Bilgiler
+
+Ders: Bulut Bilişim
+
+Danışman:
+Dr. Öğr. Üyesi Hüseyin PARMAKSIZ
+
+Bilecik Şeyh Edebali Üniversitesi
+Yönetim Bilişim Sistemleri Bölümü
 2026
