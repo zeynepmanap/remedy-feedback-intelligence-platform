@@ -1,8 +1,14 @@
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODELS = ["openrouter/free", "qwen/qwen-2.5-7b-instruct:free"];
+const MODELS = [
+  "openrouter/auto",
+  "openrouter/free",
+  "qwen/qwen-2.5-7b-instruct:free",
+];
 const REFERER = "https://remedy-feedback-intelligence-platfo.vercel.app";
 const MAX_PROMPT_LENGTH = 4500;
 const REQUEST_TIMEOUT_MS = 20_000;
+const TEMPERATURE = 0.3;
+const MAX_TOKENS = 400;
 
 type OpenRouterResult = {
   status: number;
@@ -11,6 +17,8 @@ type OpenRouterResult = {
     model?: string;
     error?: string;
     detail?: string;
+    raw?: string;
+    response?: unknown;
   };
 };
 
@@ -22,17 +30,7 @@ function truncatePrompt(prompt: string) {
 [Not: Prompt Vercel/OpenRouter timeout riskini azaltmak için ${MAX_PROMPT_LENGTH} karaktere kısaltıldı.]`;
 }
 
-function safeDetail(value: unknown) {
-  if (typeof value === "string") return value;
-
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return "Detay okunamadı.";
-  }
-}
-
-async function callModel(model: string, prompt: string, temperature: number, maxTokens: number, apiKey: string) {
+async function callModel(model: string, prompt: string, apiKey: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
@@ -54,44 +52,58 @@ async function callModel(model: string, prompt: string, temperature: number, max
             content: prompt,
           },
         ],
-        temperature,
-        max_tokens: maxTokens,
+        temperature: TEMPERATURE,
+        max_tokens: MAX_TOKENS,
       }),
     });
 
-    const responseText = await response.text();
+    const rawText = await response.text();
     console.error("OpenRouter status:", response.status);
-    console.error("OpenRouter body:", responseText);
+    console.error("OpenRouter raw:", rawText);
 
-    let data: any = {};
+    let data: any;
     try {
-      data = responseText ? JSON.parse(responseText) : {};
+      data = JSON.parse(rawText);
     } catch (error) {
-      data = {
-        error: `OpenRouter JSON parse hatası: ${error instanceof Error ? error.message : "Bilinmeyen parse hatası"}`,
-        raw: responseText,
+      console.error("OpenRouter JSON parse failed:", error);
+      return {
+        ok: false as const,
+        error: "OpenRouter JSON parse failed",
+        detail: error instanceof Error ? error.message : "Bilinmeyen JSON parse hatası",
+        raw: rawText,
       };
     }
+
+    console.error(JSON.stringify(data, null, 2));
 
     if (!response.ok) {
       return {
-        ok: false,
-        detail: data?.error?.message || data?.error || responseText || `HTTP ${response.status}`,
+        ok: false as const,
+        error: "OpenRouter yanıt vermedi",
+        detail: data?.error?.message || data?.error || rawText || `HTTP ${response.status}`,
+        response: data,
       };
     }
 
-    const content = data?.choices?.[0]?.message?.content;
+    const content =
+      data?.choices?.[0]?.message?.content ||
+      data?.choices?.[0]?.text ||
+      data?.message?.content ||
+      data?.output ||
+      null;
 
     if (typeof content !== "string" || !content.trim()) {
       return {
-        ok: false,
-        detail: data?.error?.message || data?.error || "OpenRouter boş content döndü.",
+        ok: false as const,
+        error: "OpenRouter returned empty content",
+        detail: "OpenRouter başarılı durum koduyla boş içerik döndürdü.",
+        response: data,
       };
     }
 
     return {
-      ok: true,
-      text: content,
+      ok: true as const,
+      text: content.trim(),
     };
   } catch (error) {
     const detail =
@@ -105,7 +117,8 @@ async function callModel(model: string, prompt: string, temperature: number, max
     console.error("OpenRouter body:", detail);
 
     return {
-      ok: false,
+      ok: false as const,
+      error: "OpenRouter yanıt vermedi",
       detail,
     };
   } finally {
@@ -113,7 +126,7 @@ async function callModel(model: string, prompt: string, temperature: number, max
   }
 }
 
-async function callOpenRouter(prompt: string, temperature: number, maxTokens: number): Promise<OpenRouterResult> {
+async function callOpenRouter(prompt: string): Promise<OpenRouterResult> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
   if (!apiKey) {
@@ -125,9 +138,15 @@ async function callOpenRouter(prompt: string, temperature: number, maxTokens: nu
 
   const shortenedPrompt = truncatePrompt(prompt);
   const details: string[] = [];
+  let lastFailure: {
+    error: string;
+    detail?: string;
+    raw?: string;
+    response?: unknown;
+  } | null = null;
 
   for (const model of MODELS) {
-    const result = await callModel(model, shortenedPrompt, temperature, maxTokens, apiKey);
+    const result = await callModel(model, shortenedPrompt, apiKey);
 
     if (result.ok && result.text) {
       return {
@@ -136,14 +155,17 @@ async function callOpenRouter(prompt: string, temperature: number, maxTokens: nu
       };
     }
 
+    lastFailure = result;
     details.push(`${model}: ${result.detail || "Bilinmeyen hata"}`);
   }
 
   return {
-    status: 500,
+    status: 502,
     body: {
-      error: "OpenRouter yanıt vermedi",
+      error: lastFailure?.error || "OpenRouter yanıt vermedi",
       detail: details.join(" | "),
+      ...(lastFailure?.raw !== undefined ? { raw: lastFailure.raw } : {}),
+      ...(lastFailure?.response !== undefined ? { response: lastFailure.response } : {}),
     },
   };
 }
@@ -153,15 +175,12 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: "Sadece POST desteklenir." });
   }
 
-  const { prompt, temperature = 0.55, maxTokens = 2500 } = req.body || {};
+  const { prompt } = req.body || {};
 
   if (!prompt || typeof prompt !== "string") {
     return res.status(400).json({ error: "prompt zorunlu." });
   }
 
-  const safeTemperature = Number.isFinite(Number(temperature)) ? Number(temperature) : 0.55;
-  const safeMaxTokens = Number.isFinite(Number(maxTokens)) ? Math.min(Number(maxTokens), 2500) : 2500;
-
-  const result = await callOpenRouter(prompt, safeTemperature, safeMaxTokens);
+  const result = await callOpenRouter(prompt);
   return res.status(result.status).json(result.body);
 }
