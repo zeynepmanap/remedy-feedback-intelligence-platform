@@ -60,7 +60,9 @@ async function generateWithServerless({ prompt, temperature = 0.55, maxTokens = 
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(typeof data.error === "string" ? data.error : `AI endpoint yanıt vermedi: ${response.status}`);
+    const error = typeof data.error === "string" ? data.error : `AI endpoint yanıt vermedi: ${response.status}`;
+    const detail = typeof data.detail === "string" ? ` Detay: ${data.detail}` : "";
+    throw new Error(`${error}${detail}`);
   }
 
   const text = typeof data.text === "string" ? data.text : "";
