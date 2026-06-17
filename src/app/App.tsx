@@ -18,6 +18,8 @@ const ADMIN_EMAIL = "admin@remedy.local";
 const ADMIN_PASSWORD = "Remedy2026!";
 
 const DATA_KEYS = [
+  "remedy_datasets",
+  "remedy_active_dataset_id",
   "remedy_selected_file",
   "remedy_last_uploads",
   "remedy_uploaded_csv",

@@ -14,6 +14,7 @@ import {
   Check,
 } from "lucide-react";
 import { saveDataset } from "../../services/databaseService";
+import { parseAndNormalizeDataset } from "../../utils/datasetParser";
 
 type UploadRow = {
   id: string;
@@ -98,31 +99,6 @@ function getToday() {
   return new Date().toLocaleDateString("tr-TR");
 }
 
-function countRows(text: string) {
-  return Math.max(text.split(/\r?\n/).filter((line) => line.trim().length > 0).length - 1, 0);
-}
-
-function buildPreviewData(fileText: string, type: UploadRow["type"]) {
-  if (type === "json") {
-    try {
-      const parsed = JSON.parse(fileText);
-      return Array.isArray(parsed) ? parsed.slice(0, 5) : parsed;
-    } catch {
-      return { raw: fileText.slice(0, 1000) };
-    }
-  }
-
-  const lines = fileText
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
-    .slice(0, 6);
-
-  return {
-    headers: lines[0] || "",
-    rows: lines.slice(1),
-  };
-}
-
 function getSourceName(fileName: string) {
   const lower = fileName.toLowerCase();
   if (lower.endsWith(".json")) return "JSON Dosyası";
@@ -171,6 +147,17 @@ function saveDatasets(datasets: UploadRow[]) {
   localStorage.setItem("remedy_last_uploads", JSON.stringify(datasets));
 }
 
+function appendDataset(dataset: UploadRow) {
+  const currentDatasets = getDatasets();
+  const updatedDatasets = [
+    dataset,
+    ...currentDatasets.filter((item) => item.id !== dataset.id),
+  ];
+
+  saveDatasets(updatedDatasets);
+  return updatedDatasets;
+}
+
 function clearOnlyActiveData() {
   localStorage.removeItem("remedy_selected_file");
   localStorage.removeItem("remedy_uploaded_csv");
@@ -181,10 +168,14 @@ function clearOnlyActiveData() {
 }
 
 async function setActiveDataset(dataset: UploadRow) {
-  let content = await getDatasetContent(dataset.id);
+  let content = localStorage.getItem(`remedy_dataset_content_${dataset.id}`);
 
   if (!content) {
-    content = localStorage.getItem(`remedy_dataset_content_${dataset.id}`);
+    try {
+      content = await getDatasetContent(dataset.id);
+    } catch (error) {
+      console.warn("IndexedDB read failed, using local storage.", error);
+    }
   }
 
   if (!content) {
@@ -225,6 +216,7 @@ export function DataSourcesPage() {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    let uploadedDatasetId: string | null = null;
 
     if (!file) {
       event.target.value = "";
@@ -232,28 +224,18 @@ export function DataSourcesPage() {
     }
 
     try {
-      const fileText = await file.text();
-      const brand = guessBrand(file.name);
       const type = getFileType(file.name);
+      const normalized = await parseAndNormalizeDataset(file);
+      const fileText = normalized.csv;
+      const brand = normalized.brand || guessBrand(file.name);
+      const recordCount = normalized.rows.length;
 
-      let recordCount = 0;
-
-      if (type === "csv") {
-        recordCount = countRows(fileText);
-      } else if (type === "json") {
-        try {
-          const parsed = JSON.parse(fileText);
-          recordCount = Array.isArray(parsed) ? parsed.length : 1;
-        } catch {
-          recordCount = 1;
-        }
-      } else {
-        recordCount = Math.floor(Math.random() * 1500) + 300;
+      if (recordCount === 0) {
+        throw new Error("Dosyada okunabilir şikayet kaydı bulunamadı.");
       }
 
-      const existingDatasets = getDatasets();
-
       const id = `ds-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      uploadedDatasetId = id;
 
       const newDataset: UploadRow = {
         id,
@@ -266,44 +248,69 @@ export function DataSourcesPage() {
         type,
       };
 
-      await saveDatasetContent(id, fileText);
+      localStorage.setItem(`remedy_dataset_content_${id}`, fileText);
 
-      const updatedDatasets = [newDataset, ...existingDatasets];
-      saveDatasets(updatedDatasets);
-      setDatasets(updatedDatasets);
-
-      const currentActiveId = localStorage.getItem("remedy_active_dataset_id");
-
-      if (!currentActiveId) {
-        const activated = await setActiveDataset(newDataset);
-        if (activated) {
-          setActiveDatasetId(id);
-          setSelectedFileName(file.name);
-        }
-      } else {
-        setActiveDatasetId(currentActiveId);
-        setSelectedFileName(localStorage.getItem("remedy_selected_file"));
+      try {
+        await saveDatasetContent(id, fileText);
+      } catch (error) {
+        console.error("IndexedDB veri seti kaydı başarısız, localStorage kullanılacak:", error);
       }
 
-      await saveDataset({
-        name: file.name,
-        type,
-        row_count: recordCount,
-        brand,
-        data: {
-          id,
-          fileName: file.name,
+      const updatedDatasets = appendDataset(newDataset);
+      setDatasets(updatedDatasets);
+
+      const activated = await setActiveDataset(newDataset);
+      if (!activated) {
+        throw new Error("Yüklenen veri seti aktif hale getirilemedi.");
+      }
+
+      setActiveDatasetId(id);
+      setSelectedFileName(file.name);
+
+      try {
+        const { error } = await saveDataset({
+          name: file.name,
+          type,
+          row_count: recordCount,
           brand,
-          preview: buildPreviewData(fileText, type),
-        },
-      });
+          data: {
+            id,
+            fileName: file.name,
+            brand,
+            preview: normalized.rows.slice(0, 5),
+          },
+        });
+
+        if (error) {
+          console.warn("Supabase save failed, using local dataset.");
+        }
+      } catch (error) {
+        console.warn("Supabase save failed, using local dataset.", error);
+      }
 
       alert(
         `${file.name} başarıyla listeye eklendi.\nKayıt sayısı: ${recordCount}\n\nAnaliz etmek için tabloda bu dosyanın yanındaki "Analiz Et" butonuna bas.`
       );
     } catch (error) {
       console.error(error);
-      alert("Dosya yüklenirken hata oluştu. Tarayıcı depolama iznini veya dosya formatını kontrol edin.");
+
+      const datasetWasSaved =
+        uploadedDatasetId !== null &&
+        getDatasets().some((dataset) => dataset.id === uploadedDatasetId);
+      const contentWasSaved =
+        uploadedDatasetId !== null &&
+        Boolean(localStorage.getItem(`remedy_dataset_content_${uploadedDatasetId}`));
+      const datasetBecameActive =
+        uploadedDatasetId !== null &&
+        localStorage.getItem("remedy_active_dataset_id") === uploadedDatasetId;
+      const localUploadSucceeded =
+        datasetWasSaved && contentWasSaved && datasetBecameActive;
+
+      if (localUploadSucceeded) {
+        console.warn("Upload completed locally; suppressing non-upload error.", error);
+      } else {
+        alert("Dosya yüklenirken hata oluştu. Tarayıcı depolama iznini veya dosya formatını kontrol edin.");
+      }
     } finally {
       event.target.value = "";
     }
@@ -350,22 +357,35 @@ export function DataSourcesPage() {
     if (!confirmDelete) return;
 
     try {
-      const updatedDatasets = datasets.filter((item) => item.id !== dataset.id);
+      const currentDatasets = getDatasets();
+      const deletedIndex = currentDatasets.findIndex((item) => item.id === dataset.id);
+      const updatedDatasets = currentDatasets.filter((item) => item.id !== dataset.id);
+      const currentActiveId =
+        localStorage.getItem("remedy_active_dataset_id") || activeDatasetId;
 
-      await deleteDatasetContent(dataset.id);
+      try {
+        await deleteDatasetContent(dataset.id);
+      } catch (error) {
+        console.warn("IndexedDB delete failed, local dataset list will still be updated.", error);
+      }
       localStorage.removeItem(`remedy_dataset_content_${dataset.id}`);
 
       saveDatasets(updatedDatasets);
 
-      if (dataset.id === activeDatasetId) {
+      if (dataset.id === currentActiveId) {
         clearOnlyActiveData();
 
         if (updatedDatasets.length > 0) {
-          const activated = await setActiveDataset(updatedDatasets[0]);
+          const nextDataset =
+            updatedDatasets[Math.min(Math.max(deletedIndex, 0), updatedDatasets.length - 1)];
+          const activated = await setActiveDataset(nextDataset);
 
           if (activated) {
-            setSelectedFileName(updatedDatasets[0].fileName);
-            setActiveDatasetId(updatedDatasets[0].id);
+            setSelectedFileName(nextDataset.fileName);
+            setActiveDatasetId(nextDataset.id);
+          } else {
+            setSelectedFileName(null);
+            setActiveDatasetId(null);
           }
         } else {
           setSelectedFileName(null);
