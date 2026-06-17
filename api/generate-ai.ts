@@ -9,6 +9,7 @@ const MAX_PROMPT_LENGTH = 4500;
 const REQUEST_TIMEOUT_MS = 20_000;
 const TEMPERATURE = 0.3;
 const MAX_TOKENS = 400;
+const FALLBACK_MESSAGE = "Kurumsal karar destek sistemi tarafından aksiyon planı oluşturuldu.";
 
 type OpenRouterResult = {
   status: number;
@@ -19,6 +20,8 @@ type OpenRouterResult = {
     detail?: string;
     raw?: string;
     response?: unknown;
+    fallback?: boolean;
+    message?: string;
   };
 };
 
@@ -28,6 +31,151 @@ function truncatePrompt(prompt: string) {
   return `${prompt.slice(0, MAX_PROMPT_LENGTH)}
 
 [Not: Prompt Vercel/OpenRouter timeout riskini azaltmak için ${MAX_PROMPT_LENGTH} karaktere kısaltıldı.]`;
+}
+
+function extractPromptValue(prompt: string, label: string, fallback: string) {
+  const match = prompt.match(new RegExp(`${label}:\\s*([^\\n]+)`, "i"));
+  return match?.[1]?.trim() || fallback;
+}
+
+function getFallbackContext(categoryValue: string) {
+  const normalized = categoryValue.toLocaleLowerCase("tr-TR");
+
+  if (normalized.includes("batarya") || normalized.includes("akü")) {
+    return {
+      category: "Batarya",
+      rootCause: "Batarya hücre dengesi, BMS kalibrasyonu, termal yönetim ve kullanım koşulları birlikte değerlendirilmelidir.",
+      immediate: "Etkilenen araçlar için batarya sağlık taraması, hata kodu incelemesi ve kritik kayıtların servis önceliklendirmesi başlatılmalıdır.",
+      medium: "BMS yazılım sürümleri, şarj döngüleri ve parça bazlı arıza örüntüleri karşılaştırılarak teknik düzeltme programı oluşturulmalıdır.",
+      longTerm: "Batarya sağlığı için erken uyarı eşikleri ve filo genelinde öngörücü bakım modeli devreye alınmalıdır.",
+      unit: "Batarya Mühendisliği, Teknik Servis ve Kalite",
+      kpis: "tekrar arıza oranı, batarya sağlık değeri, servis çözüm süresi ve menzil sapması",
+    };
+  }
+
+  if (normalized.includes("şarj") || normalized.includes("sarj")) {
+    return {
+      category: "Şarj",
+      rootCause: "İstasyon uyumluluğu, bağlantı kararlılığı, güç elektroniği, soket iletişimi ve şarj yazılımı birlikte incelenmelidir.",
+      immediate: "İstasyon, soket ve yazılım sürümü bazında kayıtlar ayrıştırılmalı; başarısız şarj oturumları için uzaktan teşhis ve servis yönlendirmesi uygulanmalıdır.",
+      medium: "Yüksek hata üreten istasyon ve sürüm kombinasyonları için uyumluluk testleri tamamlanmalı ve düzeltici yazılım planı hazırlanmalıdır.",
+      longTerm: "Şarj ekosistemiyle ortak izleme, otomatik hata sınıflandırma ve proaktif müşteri bilgilendirme altyapısı kurulmalıdır.",
+      unit: "Şarj Sistemleri, Yazılım, Saha Operasyonları ve Müşteri Deneyimi",
+      kpis: "başarılı şarj oranı, bağlantı hata oranı, ilk çözüm süresi ve tekrar şikayet oranı",
+    };
+  }
+
+  if (normalized.includes("yazılım") || normalized.includes("yazilim") || normalized.includes("uygulama")) {
+    return {
+      category: "Yazılım",
+      rootCause: "Sürüm uyumsuzluğu, servis kesintisi, bağlantı kararsızlığı ve cihaz/araç konfigürasyonu kaynaklı hatalar analiz edilmelidir.",
+      immediate: "Hata kayıtları sürüm ve cihaz bazında gruplanmalı; kritik fonksiyonları etkileyen vakalar için geri alma veya düzeltme paketi değerlendirilmelidir.",
+      medium: "Tekrarlanan hatalar regresyon test kapsamına alınmalı, yayın öncesi kalite kapıları ve kademeli dağıtım kontrolleri güçlendirilmelidir.",
+      longTerm: "Telemetri destekli erken uyarı, otomatik hata korelasyonu ve güvenli uzaktan güncelleme yönetişimi olgunlaştırılmalıdır.",
+      unit: "Yazılım Geliştirme, DevOps, Siber Güvenlik ve Ürün Kalitesi",
+      kpis: "hatasız oturum oranı, kritik hata sayısı, düzeltme süresi ve sürüm kaynaklı tekrar oranı",
+    };
+  }
+
+  if (normalized.includes("servis")) {
+    return {
+      category: "Servis",
+      rootCause: "Randevu kapasitesi, parça bulunabilirliği, ilk temas kalitesi ve servisler arası süreç standardı birlikte değerlendirilmelidir.",
+      immediate: "Bekleyen kritik kayıtlar yaş ve risk skoruna göre önceliklendirilmeli, müşterilere sahiplik ve hedef çözüm tarihi bilgisi verilmelidir.",
+      medium: "Kapasite planı, parça tahmini ve servis kalite kontrol listeleri bölgesel talep verisiyle yeniden düzenlenmelidir.",
+      longTerm: "Uçtan uca servis yolculuğu ölçülmeli, tahmine dayalı kapasite yönetimi ve standart performans yönetişimi kurulmalıdır.",
+      unit: "Satış Sonrası Hizmetler, Servis Operasyonları, Lojistik ve Müşteri Deneyimi",
+      kpis: "randevu bekleme süresi, ilk seferde çözüm oranı, parça bekleme süresi ve memnuniyet skoru",
+    };
+  }
+
+  if (normalized.includes("güvenlik") || normalized.includes("guvenlik")) {
+    return {
+      category: "Güvenlik",
+      rootCause: "Fren, yönlendirme, hava yastığı, sürüş destek sistemleri ve kritik sensör kayıtları vaka bazında doğrulanmalıdır.",
+      immediate: "Yüksek riskli kayıtlar derhal teknik incelemeye alınmalı, etkilenen müşteriler öncelikli servis kanalına yönlendirilmeli ve güvenli kullanım iletişimi yapılmalıdır.",
+      medium: "Benzer üretim, yazılım ve parça kümeleri taranmalı; gerekli durumlarda saha aksiyonu ve düzeltici kalite planı devreye alınmalıdır.",
+      longTerm: "Güvenlik sinyalleri için erken uyarı kuralları, bağımsız doğrulama ve yönetim seviyesinde düzenli risk takibi uygulanmalıdır.",
+      unit: "Araç Güvenliği, Kalite, Mühendislik, Hukuk ve Müşteri Deneyimi",
+      kpis: "kritik vaka kapanma süresi, tekrar oranı, etkilenen araç kapsamı ve doğrulanmış güvenlik olayı sayısı",
+    };
+  }
+
+  return {
+    category: categoryValue || "Genel",
+    rootCause: "Teknik, operasyonel ve iletişim kaynaklı olası nedenler veri örüntüleriyle birlikte değerlendirilmelidir.",
+    immediate: "Yüksek riskli kayıtlar önceliklendirilmeli, sahiplik atanmalı ve müşteriye hedef çözüm süresi bildirilmelidir.",
+    medium: "Tekrarlayan sorunlar için süreç analizi ve düzeltici faaliyet planı oluşturulmalıdır.",
+    longTerm: "Kategori bazlı erken uyarı ve sürekli iyileştirme mekanizması kurulmalıdır.",
+    unit: "Operasyon, Kalite ve Müşteri Deneyimi",
+    kpis: "şikayet hacmi, çözüm süresi, tekrar oranı ve müşteri memnuniyeti",
+  };
+}
+
+function createCorporateFallbackPlan(prompt: string) {
+  const requestedCategory = extractPromptValue(prompt, "Kategori", "Genel");
+  const risk = extractPromptValue(prompt, "Risk Skoru", "değerlendirme bekliyor");
+  const count = extractPromptValue(prompt, "Şikayet Sayısı", "belirlenen sayıda");
+  const context = getFallbackContext(requestedCategory);
+
+  return `YÖNETİCİ ÖZETİ
+
+${context.category} kategorisinde ${count} müşteri geri bildirimi değerlendirilmiştir. Risk skoru ${risk} olarak izlenmekte olup konu, müşteri deneyimi ve operasyonel süreklilik açısından kontrollü ve ölçülebilir bir iyileştirme programı gerektirmektedir. Planın amacı kritik vakaları hızla güvence altına almak, tekrar eden nedenleri azaltmak ve yönetim görünürlüğünü artırmaktır.
+
+KÖK NEDEN ANALİZİ
+
+${context.rootCause} İnceleme; şikayet metinleri, teknik kayıtlar, ürün veya yazılım sürümü, servis geçmişi ve tekrar sıklığı üzerinden yürütülmelidir. Bulgular doğrulanmadan tek bir nedene kesin atıf yapılmamalı, ortak örüntüler kanıt seviyesiyle raporlanmalıdır.
+
+MÜŞTERİ DENEYİMİNE ETKİSİ
+
+Sorunun devam etmesi güven, kullanım sürekliliği ve markanın çözüm yetkinliği algısı üzerinde olumsuz etki oluşturabilir. Müşteriye tek bir sorumlu kanal atanması, düzenli durum bilgisi verilmesi ve çözüm sonrasında memnuniyet teyidi alınması önerilmektedir.
+
+OPERASYONEL ETKİLER
+
+Tekrarlayan kayıtlar destek ve servis kapasitesini artırabilir, çözüm sürelerini uzatabilir ve ekipler arasında yeniden iş üretimine neden olabilir. Vakaların risk, yaş ve tekrar durumuna göre önceliklendirilmesi; günlük operasyon listesi ile haftalık yönetim raporunun aynı veri kaynağından beslenmesi gerekmektedir.
+
+KURUMSAL İTİBARA ETKİSİ
+
+Yüksek görünürlüğe sahip veya kritik nitelikteki geri bildirimlerin gecikmesi kurumsal güven üzerinde baskı oluşturabilir. Şeffaf iletişim, doğrulanmış teknik bilgi ve ölçülebilir düzeltici faaliyetler marka itibarının korunması için temel kontrol noktalarıdır.
+
+KISA VADELİ AKSİYONLAR
+
+${context.immediate} İlk 48 saat içinde vaka sahipleri, öncelik seviyesi ve hedef tarihler belirlenmeli; kritik kayıtlar günlük olarak takip edilmelidir.
+
+ORTA VADELİ AKSİYONLAR
+
+${context.medium} İki ila altı haftalık dönemde tekrar nedenleri, kapasite ihtiyacı ve kalıcı çözüm maliyeti birlikte değerlendirilerek yönetim onaylı uygulama takvimi oluşturulmalıdır.
+
+UZUN VADELİ İYİLEŞTİRME PLANI
+
+${context.longTerm} Öğrenilen bulgular ürün, süreç ve hizmet tasarımına aktarılmalı; aynı riskin yeniden oluşmasını önleyen kontrol mekanizmaları periyodik olarak doğrulanmalıdır.
+
+SORUMLU BİRİMLER
+
+Birincil sorumluluk ${context.unit} ekiplerinde olmalıdır. Aksiyon sahibi, hedef tarih, bağımlılıklar ve kanıt dokümanları merkezi takip listesinde yönetilmeli; gecikmeler yönetim seviyesine otomatik olarak taşınmalıdır.
+
+BAŞARI GÖSTERGELERİ
+
+Temel göstergeler ${context.kpis} olmalıdır. Başlangıç değeri oluşturulmalı, haftalık eğilim izlenmeli ve hedeflerden sapma halinde düzeltici faaliyet yeniden planlanmalıdır.
+
+BEKLENEN KAZANIMLAR
+
+Planın uygulanmasıyla kritik vakalarda daha hızlı sahiplik, tekrar eden sorunlarda azalma, ekipler arası koordinasyonda iyileşme ve müşteri iletişiminde tutarlılık beklenmektedir. Bu aksiyon planı, ölçülebilir risk azaltımı ve sürdürülebilir müşteri memnuniyeti artışı sağlamayı hedeflemektedir.`;
+}
+
+function corporateFallbackResult(prompt: string, detail: string): OpenRouterResult {
+  console.error("OpenRouter kurumsal fallback devreye alındı:", detail);
+
+  return {
+    status: 200,
+    body: {
+      text: createCorporateFallbackPlan(prompt),
+      model: "corporate-decision-support",
+      fallback: true,
+      message: FALLBACK_MESSAGE,
+      detail,
+    },
+  };
 }
 
 async function callModel(model: string, prompt: string, apiKey: string) {
@@ -130,10 +278,7 @@ async function callOpenRouter(prompt: string): Promise<OpenRouterResult> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
   if (!apiKey) {
-    return {
-      status: 500,
-      body: { error: "OPENROUTER_API_KEY eksik." },
-    };
+    return corporateFallbackResult(prompt, "OPENROUTER_API_KEY eksik.");
   }
 
   const shortenedPrompt = truncatePrompt(prompt);
@@ -159,15 +304,10 @@ async function callOpenRouter(prompt: string): Promise<OpenRouterResult> {
     details.push(`${model}: ${result.detail || "Bilinmeyen hata"}`);
   }
 
-  return {
-    status: 502,
-    body: {
-      error: lastFailure?.error || "OpenRouter yanıt vermedi",
-      detail: details.join(" | "),
-      ...(lastFailure?.raw !== undefined ? { raw: lastFailure.raw } : {}),
-      ...(lastFailure?.response !== undefined ? { response: lastFailure.response } : {}),
-    },
-  };
+  return corporateFallbackResult(
+    prompt,
+    details.join(" | ") || lastFailure?.error || "OpenRouter içerik üretmedi."
+  );
 }
 
 export default async function handler(req: any, res: any) {

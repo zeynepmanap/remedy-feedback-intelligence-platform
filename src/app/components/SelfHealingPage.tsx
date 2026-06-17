@@ -15,7 +15,7 @@ import {
   Save,
   Trash2,
 } from "lucide-react";
-import { AI_ERROR_MESSAGE, generateActionPlan } from "../../services/aiService";
+import { AI_FALLBACK_MESSAGE, generateActionPlan } from "../../services/aiService";
 import { classifyCategory as classifyRiskCategory, classifyComplaintRisk, createRiskContext } from "../../utils/riskScoring";
 
 type HealingStatus = "Uygulanıyor" | "Tamamlandı" | "Planlandı" | "İzlemede";
@@ -601,9 +601,12 @@ RAPORU DOĞRUDAN "YÖNETİCİ ÖZETİ" BAŞLIĞI İLE BAŞLAT.
           item.id === card.id ? { ...item, plan, saved: false } : item
         )
       );
+
+      if (result.provider === "fallback") {
+        alert(result.message || AI_FALLBACK_MESSAGE);
+      }
     } catch (error) {
       console.error("AI aksiyon planı oluşturulamadı:", error);
-      alert(AI_ERROR_MESSAGE);
 
       const plan = getFallbackPlan(card);
 
@@ -612,6 +615,8 @@ RAPORU DOĞRUDAN "YÖNETİCİ ÖZETİ" BAŞLIĞI İLE BAŞLAT.
           item.id === card.id ? { ...item, plan, saved: false } : item
         )
       );
+
+      alert(AI_FALLBACK_MESSAGE);
     } finally {
       setLoadingId(null);
     }

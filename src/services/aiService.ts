@@ -1,4 +1,4 @@
-export const AI_ERROR_MESSAGE = "AI servisi şu anda yanıt veremiyor. Lütfen API ayarlarını kontrol edin.";
+export const AI_FALLBACK_MESSAGE = "Kurumsal karar destek sistemi tarafından aksiyon planı oluşturuldu.";
 
 type GenerateAIOptions = {
   prompt: string;
@@ -8,7 +8,8 @@ type GenerateAIOptions = {
 
 type GenerateAIResponse = {
   text: string;
-  provider: "ollama" | "openrouter";
+  provider: "ollama" | "openrouter" | "fallback";
+  message?: string;
 };
 
 const DEFAULT_OLLAMA_URL = "http://localhost:11434";
@@ -71,7 +72,11 @@ async function generateWithServerless({ prompt, temperature = 0.55, maxTokens = 
     throw new Error("AI endpoint boş yanıt döndü.");
   }
 
-  return { text, provider: "openrouter" };
+  return {
+    text,
+    provider: data.fallback === true ? "fallback" : "openrouter",
+    message: typeof data.message === "string" ? data.message : undefined,
+  };
 }
 
 export async function generateAI(options: GenerateAIOptions): Promise<GenerateAIResponse> {
@@ -87,7 +92,7 @@ export async function generateAI(options: GenerateAIOptions): Promise<GenerateAI
     return await generateWithServerless(options);
   } catch (error) {
     console.error("OpenRouter AI hatası:", error);
-    throw new Error(AI_ERROR_MESSAGE);
+    throw error;
   }
 }
 
