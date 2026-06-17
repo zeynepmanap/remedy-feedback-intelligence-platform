@@ -1,0 +1,8 @@
+[[redirects]]
+  from = "/api/generate-ai"
+  to = "/.netlify/functions/generate-ai"
+  status = 200
+OPENROUTER_API_KEY=
+
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=

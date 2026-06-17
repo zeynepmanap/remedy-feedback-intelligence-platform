@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+.git_bozuk_yedek/
+node_modules/
+.git_bozuk_yedek/
+node_modules/
+.env.local
+.env
+.env.local
+.env
